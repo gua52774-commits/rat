@@ -4,9 +4,9 @@ const crypto = require('crypto');
 // Konstanta dan penyimpanan data
 const BOT_TOKEN = '7524016177:AAEDhnG7UZ2n8BL6dXQA66_gi1IzReTazl4';
 const PUBLIC_CHANNEL_ID = '-1002857800900';
-const ADMIN_ID = 6468926488; // Pastikan ini tipe number sama dengan ctx.from.id
-const PAP_COOLDOWN_MS = 10 * 60 * 1000;
-const TOKEN_VALID_MS = 24 * 60 * 60 * 1000;
+const ADMIN_ID = 6468926488; // Pastikan tipe number sama dengan ctx.from.id
+const PAP_COOLDOWN_MS = 10 * 60 * 1000; // 10 menit cooldown kirim pap
+const TOKEN_VALID_MS = 24 * 60 * 60 * 1000; // Token berlaku 24 jam
 
 const bot = new Telegraf(BOT_TOKEN);
 bot.use(session({ defaultSession: () => ({}) }));
@@ -97,7 +97,6 @@ bot.action('BACK_TO_MENU', async (ctx) => {
   await showMainMenu(ctx);
 });
 
-
 // ------------------
 // 📸 KIRIM PAP
 // ------------------
@@ -183,7 +182,6 @@ bot.on(['photo', 'video', 'document'], async (ctx) => {
 
   await showMainMenu(ctx);
 });
-
 
 // ------------------
 // 📊 RATE PAP
@@ -296,7 +294,6 @@ bot.action(/^RATE_(\d)$/, async (ctx) => {
   await showMainMenu(ctx);
 });
 
-
 // ------------------
 // 📨 MENFES
 // ------------------
@@ -325,7 +322,6 @@ bot.action('MENFES_ID', async (ctx) => {
   await safeEditMessageText(ctx, `✅ Kirim sebagai *${username}*. Sekarang ketik pesanmu.`, { parse_mode: 'Markdown' });
 });
 
-
 // ------------------
 // 🛑 REPORT
 // ------------------
@@ -343,7 +339,6 @@ bot.command('report', async (ctx) => {
   await ctx.reply('✅ Laporan dikirim ke admin.');
   await showMainMenu(ctx);
 });
-
 
 // ------------------
 // ❓ HELP
@@ -366,7 +361,6 @@ bot.action('HELP', async (ctx) => {
     ]).reply_markup
   });
 });
-
 
 // ------------------
 // ⚙️ ADMIN CONTROL BOT ON/OFF
@@ -399,7 +393,6 @@ bot.command('botoff', async (ctx) => {
   await ctx.reply('❌ Bot telah dinonaktifkan.');
   await bot.telegram.sendMessage(PUBLIC_CHANNEL_ID, '🤖 Bot telah *dinonaktifkan* oleh admin.', { parse_mode: 'Markdown' });
 });
-
 
 // ------------------
 // Start Polling
