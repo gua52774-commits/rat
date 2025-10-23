@@ -1,11 +1,11 @@
 const { Telegraf, Markup, session } = require('telegraf');
 const crypto = require('crypto');
+const { createCanvas } = require('canvas');
 
 // Konstanta dan penyimpanan data
 const BOT_TOKEN = '7524016177:AAEDhnG7UZ2n8BL6dXQA66_gi1IzReTazl4';
 const PUBLIC_CHANNEL_ID = '-1002857800900';
 const ADMIN_ID = 6468926488; // Pastikan tipe number sama dengan ctx.from.id
-const PAP_COOLDOWN_MS = 10 * 60 * 1000; // 10 menit cooldown kirim pap
 const TOKEN_VALID_MS = 24 * 60 * 60 * 1000; // Token berlaku 24 jam
 
 const bot = new Telegraf(BOT_TOKEN);
@@ -14,9 +14,19 @@ bot.use(session({ defaultSession: () => ({}) }));
 // Status bot: aktif atau tidak
 let botActive = true;
 
-const userPapCooldown = new Map();
 const blockedUsers = new Set();
 const mediaStore = new Map();
+
+// Array stiker ID untuk fitur no 9 (stiker random)
+const STICKER_IDS = [
+  'CAACAgUAAxkBAAEBHx5goVpuC1hy7Xy3Jm2dlwEVxmSU-wACJgADVp29CpmMGbK9REjMJAQ', // contoh stiker ID
+  'CAACAgUAAxkBAAEBHx9goVpPp2Ftz6hlkYZ2y9rIap17pAACLAADVp29CmWgcxFQGvG6JAQ',
+  // Tambahkan stiker lain sesuai koleksimu
+];
+
+function getRandomSticker() {
+  return STICKER_IDS[Math.floor(Math.random() * STICKER_IDS.length)];
+}
 
 // Middleware global untuk cek status bot
 bot.use(async (ctx, next) => {
@@ -98,7 +108,7 @@ bot.action('BACK_TO_MENU', async (ctx) => {
 });
 
 // ------------------
-// 📸 KIRIM PAP
+// 📸 KIRIM PAP (Tanpa cooldown)
 // ------------------
 
 bot.action('KIRIM_PAP', async (ctx) => {
@@ -128,12 +138,6 @@ bot.action('KIRIM_ID', async (ctx) => {
 bot.on(['photo', 'video', 'document'], async (ctx) => {
   const sess = ctx.session.kirimPap;
   const now = Date.now();
-  const last = userPapCooldown.get(ctx.from.id) || 0;
-
-  if (now - last < PAP_COOLDOWN_MS) {
-    const sisa = Math.ceil((PAP_COOLDOWN_MS - (now - last)) / 60000);
-    return ctx.reply(`⏳ Tunggu ${sisa} menit lagi sebelum kirim lagi.`).then(() => showMainMenu(ctx));
-  }
 
   if (!sess || sess.status !== 'menunggu_media') {
     return ctx.reply('⚠️ Pilih dulu menu "📸 Kirim Pap".').then(() => showMainMenu(ctx));
@@ -166,9 +170,13 @@ bot.on(['photo', 'video', 'document'], async (ctx) => {
     createdAt: now,
   });
 
-  userPapCooldown.set(ctx.from.id, now);
-
   await ctx.reply('✅ Media diterima! Token sudah dikirim ke admin.');
+
+  // Kirim stiker random sebagai balasan yang fun (fitur no 9)
+  const stickerId = getRandomSticker();
+  if (stickerId) {
+    await ctx.replyWithSticker(stickerId).catch(() => {});
+  }
 
   await sendSafeMessage(ADMIN_ID,
     `📥 Pap baru\n👤 Dari: ${getUserDisplay(ctx.from)}\n🔐 Token: \`${token}\``,
@@ -204,7 +212,55 @@ bot.on('text', async (ctx) => {
     return showMainMenu(ctx);
   }
 
-  // Menfes
+  // Profile Command (fitur no 10)
+  if (text.toLowerCase() === '/profile') {
+    const userId = ctx.from.id;
+    const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name || 'User';
+
+    // Hitung jumlah pap yang dikirim user
+    let papCount = 0;
+    for (const [, val] of mediaStore) {
+      if (val.from === userId) papCount++;
+    }
+
+    try {
+      const width = 400;
+      const height = 200;
+      const canvas = createCanvas(width, height);
+      const ctx2 = canvas.getContext('2d');
+
+      // Background
+      ctx2.fillStyle = '#2C3E50';
+      ctx2.fillRect(0, 0, width, height);
+
+      // Header
+      ctx2.fillStyle = '#ECF0F1';
+      ctx2.font = 'bold 26px Sans-serif';
+      ctx2.fillText('Profile Card', 20, 40);
+
+      // User info
+      ctx2.font = '22px Sans-serif';
+      ctx2.fillText(`User: ${username}`, 20, 80);
+
+      ctx2.font = '20px Sans-serif';
+      ctx2.fillText(`Jumlah Pap Terkirim: ${papCount}`, 20, 120);
+
+      // Footer
+      ctx2.font = 'italic 16px Sans-serif';
+      ctx2.fillStyle = '#BDC3C7';
+      ctx2.fillText('Terima kasih sudah aktif di bot!', 20, height - 30);
+
+      const buffer = canvas.toBuffer();
+
+      await ctx.replyWithPhoto({ source: buffer }, { caption: `✨ Profile card untuk ${username}` });
+    } catch (err) {
+      console.error('Error generate profile card:', err);
+      await ctx.reply('❌ Gagal membuat profile card.');
+    }
+    return;
+  }
+
+  // Menfes tanpa cooldown
   if (ctx.session.menfes?.status === 'menunggu_pesan') {
     const pesan = text;
     const mode = ctx.session.menfes.mode;
@@ -300,108 +356,52 @@ bot.action(/^RATE_(\d)$/, async (ctx) => {
 
 bot.action('MENFES', async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
-  ctx.session.menfes = { mode: null, status: 'menunggu_pesan' };
+  const text = 'Ingin mengirim menfes sebagai siapa?';
   const markup = Markup.inlineKeyboard([
     [Markup.button.callback('🙈 Anonim', 'MENFES_ANON')],
     [Markup.button.callback('🪪 Identitas', 'MENFES_ID')],
     [Markup.button.callback('🔙 Kembali', 'BACK_TO_MENU')],
   ]);
-  await safeEditMessageText(ctx, 'Ingin kirim menfes sebagai?', { reply_markup: markup.reply_markup });
+  await safeEditMessageText(ctx, text, { reply_markup: markup.reply_markup });
 });
 
 bot.action('MENFES_ANON', async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
   ctx.session.menfes = { mode: 'Anonim', status: 'menunggu_pesan' };
-  await safeEditMessageText(ctx, '✅ Kirim sebagai Anonim. Sekarang ketik pesanmu.', { parse_mode: 'Markdown' });
+  await safeEditMessageText(ctx, '✅ Kamu kirim menfes sebagai: *Anonim*\nSekarang kirim pesan kamu.', { parse_mode: 'Markdown' });
 });
 
 bot.action('MENFES_ID', async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
   const username = getUserDisplay(ctx.from);
   ctx.session.menfes = { mode: username, status: 'menunggu_pesan' };
-  await safeEditMessageText(ctx, `✅ Kirim sebagai *${username}*. Sekarang ketik pesanmu.`, { parse_mode: 'Markdown' });
+  await safeEditMessageText(ctx, `✅ Kamu kirim menfes sebagai: *${username}*\nSekarang kirim pesan kamu.`, { parse_mode: 'Markdown' });
 });
 
 // ------------------
-// 🛑 REPORT
-// ------------------
-
-bot.command('report', async (ctx) => {
-  const args = ctx.message.text.split(' ').slice(1);
-  const token = args[0];
-
-  if (!token) {
-    await ctx.reply('⚠️ Gunakan: /report <token>');
-    return showMainMenu(ctx);
-  }
-
-  await sendSafeMessage(ADMIN_ID, `🚨 Laporan! Token: \`${token}\` dilaporkan oleh ${getUserDisplay(ctx.from)}`, { parse_mode: 'Markdown' });
-  await ctx.reply('✅ Laporan dikirim ke admin.');
-  await showMainMenu(ctx);
-});
-
-// ------------------
-// ❓ HELP
-// ------------------
-
-bot.action('HELP', async (ctx) => {
-  await ctx.answerCbQuery().catch(() => {});
-  const helpText = `🤖 *Bantuan Bot*\n
-📸 /start - Mulai ulang bot
-📩 /help - Tampilkan bantuan
-📊 Rate Pap - Nilai pap orang lain
-📸 Kirim Pap - Kirim media
-📨 Menfes - Kirim pesan anonim
-🔙 Kembali ke menu utama kapan saja dengan tombol yang tersedia.
-  `;
-  await safeEditMessageText(ctx, helpText, {
-    parse_mode: 'Markdown',
-    reply_markup: Markup.inlineKeyboard([
-      [Markup.button.callback('🔙 Kembali', 'BACK_TO_MENU')]
-    ]).reply_markup
-  });
-});
-
-// ------------------
-// ⚙️ ADMIN CONTROL BOT ON/OFF
+// ADMIN COMMANDS
 // ------------------
 
 bot.command('boton', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    return ctx.reply('⚠️ Kamu bukan admin.');
-  }
-
-  if (botActive) {
-    return ctx.reply('🤖 Bot sudah dalam keadaan aktif.');
-  }
-
+  if (ctx.from.id !== ADMIN_ID) return;
   botActive = true;
-  await ctx.reply('✅ Bot telah diaktifkan.');
-  await bot.telegram.sendMessage(PUBLIC_CHANNEL_ID, '🤖 Bot telah *diaktifkan* oleh admin.', { parse_mode: 'Markdown' });
+  await ctx.reply('🤖 Bot dinyalakan.');
 });
 
 bot.command('botoff', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    return ctx.reply('⚠️ Kamu bukan admin.');
-  }
-
-  if (!botActive) {
-    return ctx.reply('🤖 Bot sudah dalam keadaan nonaktif.');
-  }
-
+  if (ctx.from.id !== ADMIN_ID) return;
   botActive = false;
-  await ctx.reply('❌ Bot telah dinonaktifkan.');
-  await bot.telegram.sendMessage(PUBLIC_CHANNEL_ID, '🤖 Bot telah *dinonaktifkan* oleh admin.', { parse_mode: 'Markdown' });
+  await ctx.reply('🤖 Bot dimatikan.');
 });
 
 // ------------------
-// Start Polling
+// START BOT
 // ------------------
 
 bot.launch().then(() => {
-  console.log('Bot started...');
-});
+  console.log('Bot running...');
+}).catch(console.error);
 
-// Handle graceful stop
+// Graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
