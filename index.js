@@ -11,9 +11,23 @@ const TOKEN_VALID_MS = 24 * 60 * 60 * 1000;
 const bot = new Telegraf(BOT_TOKEN);
 bot.use(session({ defaultSession: () => ({}) }));
 
+// Status bot: aktif atau tidak
+let botActive = true;
+
 const userPapCooldown = new Map();
 const blockedUsers = new Set();
 const mediaStore = new Map();
+
+// Middleware global untuk cek status bot
+bot.use(async (ctx, next) => {
+  if (!botActive && ctx.from.id !== ADMIN_ID) {
+    try {
+      await ctx.reply('🤖 Maaf, bot sedang *nonaktif* untuk sementara.', { parse_mode: 'Markdown' });
+    } catch {}
+    return; // tidak lanjut ke handler lain
+  }
+  return next();
+});
 
 // Utility Functions
 function generateToken(length = 4) {
@@ -264,6 +278,7 @@ bot.on('text', async (ctx) => {
   }
 });
 
+// Rate buttons handler
 bot.action(/^RATE_(\d)$/, async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
   const val = parseInt(ctx.match[1]);
@@ -350,6 +365,35 @@ bot.action('HELP', async (ctx) => {
       [Markup.button.callback('🔙 Kembali', 'BACK_TO_MENU')]
     ]).reply_markup
   });
+});
+
+
+// ------------------
+// ⚙️ ADMIN CONTROL BOT ON/OFF
+// ------------------
+
+bot.command('boton', async (ctx) => {
+  if (ctx.from.id !== ADMIN_ID) return;
+
+  if (botActive) {
+    return ctx.reply('Bot sudah dalam keadaan aktif.');
+  }
+
+  botActive = true;
+  await ctx.reply('✅ Bot telah diaktifkan.');
+  await bot.telegram.sendMessage(PUBLIC_CHANNEL_ID, '🤖 Bot telah *diaktifkan* oleh admin.', { parse_mode: 'Markdown' });
+});
+
+bot.command('botoff', async (ctx) => {
+  if (ctx.from.id !== ADMIN_ID) return;
+
+  if (!botActive) {
+    return ctx.reply('Bot sudah dalam keadaan nonaktif.');
+  }
+
+  botActive = false;
+  await ctx.reply('❌ Bot telah dinonaktifkan.');
+  await bot.telegram.sendMessage(PUBLIC_CHANNEL_ID, '🤖 Bot telah *dinonaktifkan* oleh admin.', { parse_mode: 'Markdown' });
 });
 
 
