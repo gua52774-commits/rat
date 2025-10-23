@@ -4,7 +4,7 @@ const crypto = require('crypto');
 // Konstanta dan penyimpanan data
 const BOT_TOKEN = '7524016177:AAEDhnG7UZ2n8BL6dXQA66_gi1IzReTazl4';
 const PUBLIC_CHANNEL_ID = '-1002857800900';
-const ADMIN_ID = 6468926488;
+const ADMIN_ID = 6468926488; // Pastikan ini tipe number sama dengan ctx.from.id
 const PAP_COOLDOWN_MS = 10 * 60 * 1000;
 const TOKEN_VALID_MS = 24 * 60 * 60 * 1000;
 
@@ -20,7 +20,7 @@ const mediaStore = new Map();
 
 // Middleware global untuk cek status bot
 bot.use(async (ctx, next) => {
-  if (!botActive && ctx.from.id !== ADMIN_ID) {
+  if (!botActive && ctx.from?.id !== ADMIN_ID) {
     try {
       await ctx.reply('🤖 Maaf, bot sedang *nonaktif* untuk sementara.', { parse_mode: 'Markdown' });
     } catch {}
@@ -373,10 +373,12 @@ bot.action('HELP', async (ctx) => {
 // ------------------
 
 bot.command('boton', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) return;
+  if (ctx.from.id !== ADMIN_ID) {
+    return ctx.reply('⚠️ Kamu bukan admin.');
+  }
 
   if (botActive) {
-    return ctx.reply('Bot sudah dalam keadaan aktif.');
+    return ctx.reply('🤖 Bot sudah dalam keadaan aktif.');
   }
 
   botActive = true;
@@ -385,10 +387,12 @@ bot.command('boton', async (ctx) => {
 });
 
 bot.command('botoff', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) return;
+  if (ctx.from.id !== ADMIN_ID) {
+    return ctx.reply('⚠️ Kamu bukan admin.');
+  }
 
   if (!botActive) {
-    return ctx.reply('Bot sudah dalam keadaan nonaktif.');
+    return ctx.reply('🤖 Bot sudah dalam keadaan nonaktif.');
   }
 
   botActive = false;
@@ -397,6 +401,14 @@ bot.command('botoff', async (ctx) => {
 });
 
 
-// Jalankan Bot
-bot.launch();
-console.log('Bot started!');
+// ------------------
+// Start Polling
+// ------------------
+
+bot.launch().then(() => {
+  console.log('Bot started...');
+});
+
+// Handle graceful stop
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
